@@ -1,15 +1,9 @@
 import socket
 import threading
+from random import randint
 
 #Clients list will contain dict with keys client_socket and client_name
 clients = []
-
-temp_arg = []
-
-commands = {
-    '/help': lambda: broadcast_message("Available commands: /help, /exit, /about, /report <username>, /changename <new-username>"),
-    '/exit': lambda: clients.remove(temp_arg[0]) #temp_arg[0] is the client in this case
-}
 
 HOST = '127.0.0.1'
 PORT = 7423
@@ -38,11 +32,6 @@ def handle_client(client):
             
             broadcast_message(f"{client['client_name']}: {message}", client)
 
-            #This func will check for commands in the message
-            if  message.split()[0] in [cmd for cmd in commands.keys()]:
-                temp_arg.append(client, message.split()[1]) #adding argument to temp_arg
-                commands[message.split()[0]]() #calling the lambda command
-                temp_arg.clear() #Making the temp_arg empty again
             
         #If client has closed the socket or left the chat
         except Exception as e:
@@ -63,18 +52,23 @@ def receive_connections():
         #First message from the client will be the username
         client_name = client_socket.recv(1024).decode()
 
-        #This function is checking whether the user already exists or not.
-        #This algorithm can be enhanced ***
-        if client_name in [i['client_name'] for i in clients]:
-            client_socket.send("Username already taken. Connection closed.".encode())
-            client_socket.close() #Closing the socket if username already exists
-            continue
+        # This block checks whether the username already exists; if it does, it appends a random 2-digit number to ensure uniqueness.
+        existing_names = [i['client_name'] for i in clients]
+
+        if client_name in existing_names:
+            client_socket.send("Username already taken. Assigning you a new name.".encode())
+            #This block check the newly generated name if it is also exists already and assign a new
+            while True:
+                new_name = client_name + str(randint(1, 99))
+                if new_name not in existing_names:
+                    client_name = new_name
+                    break
 
         client = {'client_name': client_name, 'client_socket': client_socket}
         clients.append(client)
 
         #Initial connection message
-        broadcast_message(f"{client_name} has joined the chat!")
+        broadcast_message(f"{client_name} has joined the chat!", client)
 
         thread = threading.Thread(target=handle_client, args=(client,))
 
