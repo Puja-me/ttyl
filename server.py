@@ -86,7 +86,7 @@ class ChatServer:
                     if not message:
                         break
                     if not self.handle(message):
-                        self.server.broadcast(f"{self.name}: {message}")
+                        self.server.broadcast(f"{self.name}: {message}", sender={'name': self.name})
             except ConnectionAbortedError:
                 print(f"{self.name} requested disconnect")
             except Exception as e:
