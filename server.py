@@ -1,77 +1,128 @@
 import socket
 import threading
 from random import randint
+from datetime import datetime
 
-#Clients list will contain dict with keys client_socket and client_name
-clients = []
+class ChatServer:
+    def __init__(self, host='127.0.0.1', port=7423):
+        self.host = host
+        self.port = port
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.clients = []
+        self.reports = []
+        self.setup_server()
 
-HOST = '127.0.0.1'
-PORT = 7423
+    def setup_server(self):
+        self.server.bind((self.host, self.port))
+        self.server.listen()
+        print(f"Server listening on {self.host}:{self.port}")
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((HOST, PORT))
+    def broadcast(self, message, sender=None):
+        for client in self.clients:
+            if sender and client['name'] == sender['name']:
+                continue
+            try:
+                client['socket'].send(message.encode())
+            except:
+                self.remove_client(client)
 
-server.listen()
+    def remove_client(self, client):
+        if client in self.clients:
+            self.clients.remove(client)
+            self.broadcast(f"{client['name']} has left the chat.")
 
-def broadcast_message(msg, sender=None):
-    for client in clients:
-        client_name = client['client_name']
-        client_socket = client['client_socket']
-        if sender is None or client_name != sender['client_name']:
-            client_socket.send(msg.encode())
+    class ClientHandler:
+        def __init__(self, server_instance, client_socket, client_name):
+            self.server = server_instance
+            self.socket = client_socket
+            self.name = client_name
+            self.commands = {
+                '!USERLIST_REQUEST': self.handle_userlist,
+                '!PRIVATE': self.handle_private,
+                '!REPORT': self.handle_report,
+                '!DISCONNECT': self.handle_disconnect
+            }
 
-#Function to handle messages from clients
-def handle_client(client):
-    while True:
-        try:
-            client_socket = client['client_socket']
-            message = client_socket.recv(1024).decode()
-            if not message:
-                #Disconnect client message if no message received, by default it means the client is no longer connected
-                raise Exception(f"{client['client_name']} disconnected!")
+        def handle(self, message):
+            for prefix, handler in self.commands.items():
+                if message.startswith(prefix):
+                    #Issue: Making recipient empty as ':' prefix was still there
+                    #Fix: Removed unwanted ':' from very left side (prefix)
+                    return handler(message[len(prefix):].lstrip(':'))
+            return False
+
+        def handle_userlist(self, _):
+            user_list = [c['name'] for c in self.server.clients]
+            self.socket.send(f"!USERLIST:{','.join(user_list)}".encode())
+
+        def handle_private(self, args):
+            recipient, *msg_parts = args.split(':', 1)
             
-            broadcast_message(f"{client['client_name']}: {message}", client)
-
-            
-        #If client has closed the socket or left the chat
-        except Exception as e:
-            if client in clients:
-                broadcast_message(f"{client['client_name']} has left the chat!", client)
-                clients.remove(client)
-                break
-
-#Fuction to receive and accept connections from clients
-def receive_connections():
-    print(f"Server is listening on port {PORT}...")
-
-    while True:
-        client_socket, address = server.accept()
-
-        print(f"Connection from: {str(address)}")
-
-        #First message from the client will be the username
-        client_name = client_socket.recv(1024).decode()
-
-        # This block checks whether the username already exists; if it does, it appends a random 2-digit number to ensure uniqueness.
-        existing_names = [i['client_name'] for i in clients]
-
-        if client_name in existing_names:
-            client_socket.send("Username already taken. Assigning you a new name.".encode())
-            #This block check the newly generated name if it is also exists already and assign a new
-            while True:
-                new_name = client_name + str(randint(1, 99))
-                if new_name not in existing_names:
-                    client_name = new_name
+            if not msg_parts:
+                return
+            for client in self.server.clients:
+                if client['name'] == recipient:
+                    client['socket'].send(f"!PRIVATE:{self.name}:{msg_parts[0]}".encode())
                     break
+            #Issue: Broadcasting Private msgs
+            #Fix:  self.handle(message) was returning false even for Private msgs, return True will output True, telling it's a private message and not to broadcast
+            return True
 
-        client = {'client_name': client_name, 'client_socket': client_socket}
-        clients.append(client)
+        def handle_report(self, username):
+            self.server.reports.append({
+                'reporter': self.name,
+                'reported': username,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            self.socket.send(f"!WARNING:User {username} reported. Admin notified.".encode())
 
-        #Initial connection message
-        broadcast_message(f"{client_name} has joined the chat!", client)
+        def handle_disconnect(self, _):
+            raise ConnectionAbortedError("Client requested disconnect")
 
-        thread = threading.Thread(target=handle_client, args=(client,))
+        def process_messages(self):
+            try:
+                while True:
+                    message = self.socket.recv(1024).decode()
+                    if not message:
+                        break
+                    if not self.handle(message):
+                        self.server.broadcast(f"{self.name}: {message}")
+            except ConnectionAbortedError:
+                print(f"{self.name} requested disconnect")
+            except Exception as e:
+                print(f"Error with {self.name}: {e}")
+            finally:
+                self.server.remove_client({'socket': self.socket, 'name': self.name})
+                self.socket.close()
 
-        thread.start()
+    def accept_connections(self):
+        while True:
+            client_socket, addr = self.server.accept()
+            client_name = client_socket.recv(1024).decode()
 
-receive_connections()
+            # Handle duplicate names
+            existing_names = [c['name'] for c in self.clients]
+            if client_name in existing_names:
+                suffix = str(randint(10, 99))
+                client_socket.send(f"NAME_EXISTS:{suffix}".encode())
+                client_name = f"{client_name}{suffix}"
+            else:
+                client_socket.send("NAME_ACCEPTED".encode())
+
+            client = {'socket': client_socket, 'name': client_name}
+            self.clients.append(client)
+            
+            self.broadcast(f"{client_name} has joined the chat!")
+            client_socket.send(f"Welcome {client_name}! Commands: /users, /private, /report".encode())
+
+            handler = self.ClientHandler(self, client_socket, client_name)
+            thread = threading.Thread(target=handler.process_messages)
+            thread.start()
+
+if __name__ == "__main__":
+    server = ChatServer()
+    try:
+        server.accept_connections()
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+        server.server.close()
