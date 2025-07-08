@@ -1,13 +1,22 @@
-# TTYL - Lucky's Branch
+# TTYL - A Simple Chat Application
 
-This branch contains **Lucky's work** for the **TTYL Project** under the **PacketVSocket SMP** of **Cipher SIG, IET NITK**.
+This is the **main branch** of the **TTYL (Talk To You Later)** project, developed under the **PacketVSocket SMP** of **Cipher SIG, IET NITK**.
 
 ## About the Project
-**TTYL (Talk To You Later)** is a simple client application that enables sending and receiving messages over a network between devices.
 
-## Focus Areas
-- Sockets programming
-- Networking concepts
+**TTYL** is a lightweight client-server chat application that enables real-time messaging between multiple devices over a network using Python's socket programming.
 
-## Current Status
-- No major features added yet. Work in progress!
+## Features
+
+- Public chat room for all connected users
+- Private messaging between users
+- User list retrieval
+- Report functionality for moderation
+- Clean disconnection handling
+- More comming soon...
+
+## Technologies Used
+
+- **Python**
+- **Socket Programming**
+- **Cryptography (Fernet)** for private message encryption
