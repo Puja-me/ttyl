@@ -48,13 +48,13 @@ class ChatServer:
                 if message.startswith(prefix):
                     #Issue: Making recipient empty as ':' prefix was still there
                     #Fix: Removed unwanted ':' from very left side (prefix)
-                    return handler(message[len(prefix):].lstrip(':'))
+                    return handler(message[len(prefix):].lstrip(':')) 
             return False
 
         def handle_userlist(self, _):
             user_list = [c['name'] for c in self.server.clients]
-            self.socket.send(f"!USERLIST:{','.join(user_list)}".encode())
-
+            self.socket.send(f"!USERLIST:{','.join(user_list)}".encode())   #issue: when userlist is requested all other clients are informed of command  
+            return True                                                     #fix: return was missing causing none to be returned triggering a the broadcast 
         def handle_private(self, args):
             recipient, *msg_parts = args.split(':', 1)
             
@@ -74,7 +74,12 @@ class ChatServer:
                 'reported': username,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
-            self.socket.send(f"!WARNING:User {username} reported. Admin notified.".encode())
+            for clients in self.server.clients:
+                if clients['name'] == username:     #issue: the warning msg is send to the reporter instead of the username
+                    self.socket=clients['socket']   #fix: change the client socket to the username socket
+                    self.socket.send(f"!WARNING:User {username} reported. Admin notified.".encode())
+                else:
+                    break
 
         def handle_disconnect(self, _):
             raise ConnectionAbortedError("Client requested disconnect")
