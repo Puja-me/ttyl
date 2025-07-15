@@ -2,8 +2,6 @@ import socket
 import threading
 from cryptography.fernet import Fernet
 
-import json
-
 # Configuration
 HOST = '127.0.0.1'  # Change to LAN IP for actual LAN connectivity
 PORT = 7423
@@ -55,6 +53,27 @@ def encrypt_message(message):
 def decrypt_message(encrypted_msg):
     return cipher_suite.decrypt(encrypted_msg.encode()).decode()
 
+#Introduced safe_socket_close to prevent errors
+def safe_socket_close():
+    """Safely close the socket connection"""
+    global running
+    running = False
+    
+    try:
+        # Shutdown the socket for both sending and receiving
+        client.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        # Socket might already be closed
+        pass
+    
+    try:
+        # Close the socket
+        client.close()
+    except OSError:
+        pass
+    
+    print("Connection closed safely.")
+
 class ClientCommandHandler:
     def __init__(self, client_socket, cipher_suite):
         self.client = client_socket
@@ -63,7 +82,13 @@ class ClientCommandHandler:
             '/users': self.list_users,
             '/private': self.send_private,
             '/report': self.report_user,
-            '/exit': self.exit_chat
+            '/exit': self.exit_chat,
+            #Admin commands
+            '/kick': self.kick_user,
+            '/ban': self.ban_user,
+            '/unban': self.unban_user,
+            '/admin': self.new_admin,
+            '/demote': self.demote_admin
         }
         self.temp_list = {
             'reported_users': [],
@@ -107,6 +132,42 @@ class ClientCommandHandler:
         self.client.send(f"!REPORT:{username}".encode())
         print(f"User {username} reported to admin")
         return True
+    
+    def kick_user(self, username):
+        if not username:
+            print("Usage: /kick username")
+            return True
+        
+        self.client.send(f"!KICK:{username}".encode())
+        return True
+
+    def ban_user(self, username):
+        if not username:
+            print("Usage: /ban username")
+            return True
+        
+        self.client.send(f"!BAN:{username}".encode())
+        return True
+    
+    def unban_user(self, username):
+        if not username:
+            print("Usage: /ban username")
+            return True
+        
+        self.client.send(f"!UNBAN:{username}".encode())
+        return True
+    
+    def new_admin(self, username):
+        if not username:
+            print("Usage: /admin username")
+            return True
+        
+        self.client.send(f"!ADMIN:{username}".encode())
+        return True
+    
+    def demote_admin(self , _):
+        self.client.send(f"!DEMOTE".encode())
+        return True
 
     def exit_chat(self, _):
         self.client.send("!DISCONNECT".encode())
@@ -127,13 +188,17 @@ def receive_message():
     while True:
         try:
             message = client.recv(1024).decode()
-            
-            if message.startswith("!USERLIST:"):
+            if not message:
+                print("Disconnected from server.")
+                exit()
+            elif message.startswith("!USERLIST:"):
                 users = message[10:].split(',')
-                print("\n=== Online Users ===")
+                user_list = "\n=== Online Users ===\n"
                 for user in users:
-                    if user: print(f"- {user}")
-                print("===================")
+                    if user: user_list += f"- {user}\n"
+                user_list += "==================="
+                print(user_list)
+
             elif message.startswith("!PRIVATE:"):
                 parts = message.split(':', 2)
                 sender = parts[1]
@@ -161,16 +226,28 @@ def start_client():
     receive_thread.daemon = True
     receive_thread.start()
     
-    # Print help menu
-    print("\n=== Chat Commands ===")
-    print("/users - List online users")
-    print("/private [user] [msg] - Send private message")
-    print("/report [user] - Report a user to admin")
-    print("/exit - Leave the chat")
-    print("====================\n")
+     # Print help menu
+    init_msg = "\n=== Chat Commands ===\n"
+    init_msg += "/users - List online users\n"
+    init_msg += "/private [user] [msg] - Send private message\n"
+    init_msg += "/report [user] - Report a user to admin\n"
+    init_msg += "/exit - Leave the chat\n"
+    init_msg += "=== Admins only ===\n"
+    init_msg += "/kick [user] - Kick a user\n"
+    init_msg += "/ban [user] - Ban a user\n"
+    init_msg += "/unban [user] - Unban a user\n"
+    init_msg += "/admin [user] - Make a user admin\n"
+    init_msg += "/demote - Demote itself to user\n"
+    init_msg += "====================\n"
+    print(init_msg)
     
     # Start sending messages
     send_message()
 
 if __name__ == "__main__":
-    start_client()
+    try:
+        start_client()
+    except KeyboardInterrupt:
+        print("\nProgram interrupted.")
+    finally:
+        safe_socket_close()
