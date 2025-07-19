@@ -40,7 +40,8 @@ class ChatServer:
                 '!USERLIST_REQUEST': self.handle_userlist,
                 '!PRIVATE': self.handle_private,
                 '!REPORT': self.handle_report,
-                '!DISCONNECT': self.handle_disconnect
+                '!DISCONNECT': self.handle_disconnect,
+                '!CHANGE_NAME':self.handle_username_change
             }
 
         def handle(self, message):
@@ -48,13 +49,14 @@ class ChatServer:
                 if message.startswith(prefix):
                     #Issue: Making recipient empty as ':' prefix was still there
                     #Fix: Removed unwanted ':' from very left side (prefix)
-                    return handler(message[len(prefix):].lstrip(':'))
+                    handler(message[len(prefix):].lstrip(':'))
+                    return True
             return False
 
         def handle_userlist(self, _):
             user_list = [c['name'] for c in self.server.clients]
-            self.socket.send(f"!USERLIST:{','.join(user_list)}".encode())
-
+            self.socket.send(f"!USERLIST:{','.join(user_list)}".encode())   #issue: when userlist is requested all other clients are informed of command  
+            return True                                                     #fix: return was missing causing none to be returned triggering a the broadcast 
         def handle_private(self, args):
             recipient, *msg_parts = args.split(':', 1)
             
@@ -67,6 +69,18 @@ class ChatServer:
             #Issue: Broadcasting Private msgs
             #Fix:  self.handle(message) was returning false even for Private msgs, return True will output True, telling it's a private message and not to broadcast
             return True
+        def handle_username_change(self,new_username):
+            EXISTING_NAME=[c['name'] for c in self.server.clients]
+            if new_username in EXISTING_NAME:
+                self.socket.send(f"NAME EXISTS try again".encode())
+            else:
+                for client in self.server.clients:
+                    if self.socket==client["socket"]:
+                        self.server.broadcast(f"{client["name"]} changed username to {new_username}")
+                        client["name"]=new_username
+                        self.name=new_username
+                        return True
+            return False
 
         def handle_report(self, username):
             self.server.reports.append({
@@ -74,7 +88,12 @@ class ChatServer:
                 'reported': username,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
-            self.socket.send(f"!WARNING:User {username} reported. Admin notified.".encode())
+            for clients in self.server.clients:
+                if clients['name'] == username:     #issue: the warning msg is send to the reporter instead of the username
+                    self.socket=clients['socket']   #fix: change the client socket to the username socket
+                    self.socket.send(f"!WARNING:User {username} reported. Admin notified.".encode())
+                    return True
+                
 
         def handle_disconnect(self, _):
             raise ConnectionAbortedError("Client requested disconnect")
