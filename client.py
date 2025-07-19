@@ -10,7 +10,8 @@ PROTOCOL = "TCP"     # Using TCP which includes 3-way handshake
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 name = ""
 
-
+public_key=b'6TPrC1hRnL26fp7pA4JBplbaFILCyCNlBHIHmJtW3uY='
+public_cipher = Fernet(public_key)
 #Fix: For Private messages decryption
 #Issue: For every client key was different
 #Fix: Shared key (same on all clients)
@@ -181,7 +182,7 @@ def send_message():
         msg = input()
         if not handler.handle_command(msg):
             # Regular message if not a command
-            encrypted_msg = cipher_suite.encrypt(msg.encode()).decode()
+            encrypted_msg = public_cipher.encrypt(msg.encode()).decode()
             client.send(encrypted_msg.encode())
 
 
@@ -212,13 +213,13 @@ def receive_message():
                 if ": " in message:
                     sender, encrypted_part=message.split(": ",1)
                     try:
-                        decrypted_msg=cipher_suite.decrypt(encrypted_part.encode()).decode()
+                        decrypted_msg=public_cipher.decrypt(encrypted_part.encode()).decode()
                         print(f"{sender} : {decrypted_msg}")
                     except Exception:
                         print(message)
                 else:
                     try:
-                        decrypted_msg=cipher_suite.decrypt(message.encode()).decode()
+                        decrypted_msg=public_cipher.decrypt(message.encode()).decode()
                         print(decrypted_msg)
                     except Exception:
                         print(message)
