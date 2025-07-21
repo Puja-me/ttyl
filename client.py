@@ -10,7 +10,8 @@ PROTOCOL = "TCP"     # Using TCP which includes 3-way handshake
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 name = ""
 
-
+public_key=b'6TPrC1hRnL26fp7pA4JBplbaFILCyCNlBHIHmJtW3uY='
+public_cipher = Fernet(public_key)
 #Fix: For Private messages decryption
 #Issue: For every client key was different
 #Fix: Shared key (same on all clients)
@@ -82,6 +83,7 @@ class ClientCommandHandler:
             '/users': self.list_users,
             '/private': self.send_private,
             '/report': self.report_user,
+            '/change_name':self.name_change,
             '/exit': self.exit_chat,
             #Admin commands
             '/kick': self.kick_user,
@@ -121,6 +123,13 @@ class ClientCommandHandler:
         recipient, message = parts
         encrypted = self.cipher.encrypt(message.encode()).decode()
         self.client.send(f"!PRIVATE:{recipient}:{encrypted}".encode())
+        return True
+
+    def name_change(self,new_username):
+        if not new_username:
+            print("Usage: /change_name new_username")
+            return True
+        self.client.send(f"!CHANGE_NAME:{new_username}".encode())
         return True
 
     def report_user(self, username):
@@ -181,7 +190,8 @@ def send_message():
         msg = input()
         if not handler.handle_command(msg):
             # Regular message if not a command
-            client.send(msg.encode())
+            encrypted_msg = public_cipher.encrypt(msg.encode()).decode()
+            client.send(encrypted_msg.encode())
 
 
 def receive_message():
@@ -208,7 +218,19 @@ def receive_message():
             elif message.startswith("!WARNING:"):
                 print(f"\nSERVER WARNING: {message[9:]}\n")
             else:
-                print(message)
+                if ": " in message:
+                    sender, encrypted_part=message.split(": ",1)
+                    try:
+                        decrypted_msg=public_cipher.decrypt(encrypted_part.encode()).decode()
+                        print(f"{sender} : {decrypted_msg}")
+                    except Exception:
+                        print(message)
+                else:
+                    try:
+                        decrypted_msg=public_cipher.decrypt(message.encode()).decode()
+                        print(decrypted_msg)
+                    except Exception:
+                        print(message)
                 
         except Exception as e:
             print(f"Connection error: {e}")
@@ -232,6 +254,7 @@ def start_client():
     init_msg += "/private [user] [msg] - Send private message\n"
     init_msg += "/report [user] - Report a user to admin\n"
     init_msg += "/exit - Leave the chat\n"
+    init_msg("/change_name [new_username] - to change your username")
     init_msg += "=== Admins only ===\n"
     init_msg += "/kick [user] - Kick a user\n"
     init_msg += "/ban [user] - Ban a user\n"
