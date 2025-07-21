@@ -47,6 +47,7 @@ class ChatServer:
                 '!PRIVATE': self.handle_private,
                 '!REPORT': self.handle_report,
                 '!DISCONNECT': self.handle_disconnect,
+                '!CHANGE_NAME':self.handle_username_change,
                 '!KICK': self.handle_kick,
                 '!BAN': self.handle_ban,
                 '!UNBAN': self.handle_unban,
@@ -81,6 +82,18 @@ class ChatServer:
             #If invalid recipient
             self.socket.send(f"!WARNING:User {recipient} doesn't exist!".encode())
             return True
+        def handle_username_change(self,new_username):
+            EXISTING_NAME=[c['name'] for c in self.server.clients]
+            if new_username in EXISTING_NAME:
+                self.socket.send(f"NAME EXISTS try again".encode())
+            else:
+                for client in self.server.clients:
+                    if self.socket==client["socket"]:
+                        self.server.broadcast(f"{client["name"]} changed username to {new_username}")
+                        client["name"]=new_username
+                        self.name=new_username
+                        return True
+            return False
 
         def handle_report(self, username):
             self.server.reports.append({

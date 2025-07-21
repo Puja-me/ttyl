@@ -82,6 +82,7 @@ class ClientCommandHandler:
             '/users': self.list_users,
             '/private': self.send_private,
             '/report': self.report_user,
+            '/change_name':self.name_change,
             '/exit': self.exit_chat,
             #Admin commands
             '/kick': self.kick_user,
@@ -121,6 +122,13 @@ class ClientCommandHandler:
         recipient, message = parts
         encrypted = self.cipher.encrypt(message.encode()).decode()
         self.client.send(f"!PRIVATE:{recipient}:{encrypted}".encode())
+        return True
+
+    def name_change(self,new_username):
+        if not new_username:
+            print("Usage: /change_name new_username")
+            return True
+        self.client.send(f"!CHANGE_NAME:{new_username}".encode())
         return True
 
     def report_user(self, username):
@@ -232,6 +240,7 @@ def start_client():
     init_msg += "/private [user] [msg] - Send private message\n"
     init_msg += "/report [user] - Report a user to admin\n"
     init_msg += "/exit - Leave the chat\n"
+    print("/change_name [new_username] - to change your username")
     init_msg += "=== Admins only ===\n"
     init_msg += "/kick [user] - Kick a user\n"
     init_msg += "/ban [user] - Ban a user\n"
