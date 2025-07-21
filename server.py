@@ -92,8 +92,10 @@ class ChatServer:
                 if clients['name'] == username:     #issue: the warning msg is send to the reporter instead of the username
                     self.socket=clients['socket']   #fix: change the client socket to the username socket
                     self.socket.send(f"!WARNING:User {username} reported. Admin notified.".encode())
+                    return True
                 else:
                     break
+            return True
 
         def handle_disconnect(self, _):
             raise ConnectionAbortedError("Client requested disconnect")
