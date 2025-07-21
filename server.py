@@ -67,8 +67,7 @@ class ChatServer:
         def handle_userlist(self, _):
             user_list = [c['name']+' - admin' if c['isAdmin'] else c['name'] for c in self.server.clients]
             self.socket.send(f"!USERLIST:{','.join(user_list)}".encode())
-            return True 
-        
+
         def handle_private(self, args):
             recipient, *msg_parts = args.split(':', 1)
             
@@ -88,14 +87,7 @@ class ChatServer:
                 'reported': username,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
-            for clients in self.server.clients:
-                if clients['name'] == username:     #issue: the warning msg is send to the reporter instead of the username
-                    self.socket=clients['socket']   #fix: change the client socket to the username socket
-                    self.socket.send(f"!WARNING:User {username} reported. Admin notified.".encode())
-                    return True
-                else:
-                    break
-            return True
+            self.socket.send(f"!WARNING:User {username} reported. Admin notified.".encode())
 
         def handle_disconnect(self, _):
             raise ConnectionAbortedError("Client requested disconnect")
