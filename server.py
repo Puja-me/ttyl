@@ -93,7 +93,7 @@ class ChatServer:
                         client["name"]=new_username
                         self.name=new_username
                         return True
-            return False
+            return True
 
         def handle_report(self, username):
             self.server.reports.append({
