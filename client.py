@@ -254,7 +254,7 @@ def start_client():
     init_msg += "/private [user] [msg] - Send private message\n"
     init_msg += "/report [user] - Report a user to admin\n"
     init_msg += "/exit - Leave the chat\n"
-    init_msg +=("/change_name [new_username] - to change your username")
+    init_msg += "/change_name [new_username] - to change your username\n"
     init_msg += "=== Admins only ===\n"
     init_msg += "/kick [user] - Kick a user\n"
     init_msg += "/ban [user] - Ban a user\n"
