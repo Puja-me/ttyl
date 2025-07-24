@@ -2,6 +2,7 @@ import socket
 import threading
 from random import randint
 from datetime import datetime
+import mysql.connector
 
 class ChatServer:
     def __init__(self, host='127.0.0.1', port=7423):
@@ -12,7 +13,50 @@ class ChatServer:
         self.reports = []
         self.banned = [] #Containing usernames of banned clients
         self.setup_server()
+        self.db = self.connect_db()
+    
+    def connect_db(self):
+            """Connect to Aiven MySQL"""
+            try:
+                conn = mysql.connector.connect(
+                    host="mysql-170206-dbms-cs252.f.aivencloud.com",
+                    port=28111,  # Your port from the connection command
+                    user="avnadmin",
+                    password="Puja",  # Replace with your actual password
+                    database="ttyl",  # Or your specific database name
+                    ssl_ca="/home/kali/Downloads/ca.pem",  # Path to your downloaded CA cert
+                    ssl_verify_cert=True  # Enable certificate verification
+                )
+                return conn
+            except Exception as e:
+                print(f"DB Connection Error: {e}")
+                return None   
 
+    def log_event(self, event_type, username, details, target_user=None, ip=None):
+        """Log to database and local file"""
+        if self.db:
+            try:
+                cursor = self.db.cursor()
+                cursor.execute("""
+                    INSERT INTO chat_logs 
+                    (timestamp, event_type, username, target_user, ip_address, details, is_admin_action)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    datetime.now(),
+                    event_type,
+                    username,
+                    target_user,
+                    ip,
+                    details,
+                    any(c['name'] == username and c['isAdmin'] for c in self.clients)
+                ))
+                self.db.commit()
+            except Exception as e:
+                print(f"DB Log Error: {e}")
+
+        # Local file logging as backup
+        with open("chat_server.log", "a") as f:
+            f.write(f"{datetime.now()} | {event_type} | {username} | {details}\n")
     def setup_server(self):
         self.server.bind((self.host, self.port))
         self.server.listen()
@@ -130,6 +174,12 @@ class ChatServer:
                             client['socket'].close()
                     self.server.clients = [client for client in self.server.clients if client['name']!=username]
                     self.server.broadcast(f"User {username} has been kicked by admin {self.name}!")
+                self.server.log_event(
+                    event_type="ADMIN_ACTION",
+                    username=self.name,
+                    target_user=username,
+                    details=f"Kicked user {username}"
+                )
             else:
                 self.socket.send(f"!WARNING:Only admins can kick a user".encode())
             return True
@@ -252,6 +302,12 @@ class ChatServer:
             handler = self.ClientHandler(self, client_socket, client_name, isAdmin)
             thread = threading.Thread(target=handler.process_messages)
             thread.start()
+            self.log_event(
+                event_type="CONNECT",
+                username=client_name,
+                details="New connection",
+		ip=addr[0]
+            )
 
 if __name__ == "__main__":
     server = ChatServer()
